@@ -8,3 +8,8 @@ tmp/
 coverage/
 .turbo/
 apps/api/tmp/
+apps/*/dist/
+packages/*/dist/
+
+# Claude Code local settings
+.claude/
