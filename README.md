@@ -399,18 +399,6 @@ docker compose restart api
 
 ---
 
-## Contributors
-
-| Name | Role |
-|---|---|
-| *(add name)* | *(role)* |
-| *(add name)* | *(role)* |
-| *(add name)* | *(role)* |
-
-*SC2006 Software Engineering — TCE2 Group 26, Nanyang Technological University*
-
----
-
 ## Licence
 
 This project is for academic and educational purposes. School data is sourced from [data.gov.sg](https://data.gov.sg) under the Singapore Open Data Licence. Commute data is sourced from [OneMap](https://www.onemap.gov.sg), provided by the Singapore Land Authority.
