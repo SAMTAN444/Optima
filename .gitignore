@@ -13,3 +13,6 @@ packages/*/dist/
 
 # Claude Code local settings
 .claude/
+
+# Internal dev specs
+claude/
