@@ -1,0 +1,148 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-musl-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT_PARENT
+  ADMIN
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model UserProfile {
+  id             String   @id @default(uuid())
+  supabaseUserId String   @unique
+  role           Role     @default(STUDENT_PARENT)
+  banned         Boolean  @default(false)
+  displayName    String?
+  homeAddress    String?
+  homePostal     String?
+  homeLat        Float?
+  homeLng        Float?
+  createdAt      DateTime @default(now())
+
+  reviews       Review[]
+  reports       ReviewReport[]
+  savedSchools  SavedSchool[]
+  commuteCaches CommuteCache[]
+}
+
+model School {
+  id         String  @id @default(uuid())
+  name       String  @unique
+  section    String?
+  isIp       Boolean @default(false)
+  address    String?
+  postalCode String?
+  url        String?
+  telephone  String?
+  lat        Float?
+  lng        Float?
+  overview   String?
+
+  ccas                  SchoolCCA[]
+  programmes            SchoolProgramme[]
+  subjects              SchoolSubject[]
+  distinctiveProgrammes SchoolDistinctiveProgramme[]
+  reviews               Review[]
+  savedBy               SavedSchool[]
+  commuteCaches         CommuteCache[]
+}
+
+model SchoolCCA {
+  id       String  @id @default(uuid())
+  schoolId String
+  ccaName  String
+  ccaGroup String?
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+}
+
+model SchoolProgramme {
+  id            String @id @default(uuid())
+  schoolId      String
+  programmeName String
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+}
+
+model SchoolSubject {
+  id          String @id @default(uuid())
+  schoolId    String
+  subjectName String
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+}
+
+model SchoolDistinctiveProgramme {
+  id       String @id @default(uuid())
+  schoolId String
+  domain   String
+  title    String
+
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+}
+
+model CommuteCache {
+  id           String   @id @default(uuid())
+  originKey    String
+  schoolId     String
+  userId       String?
+  mode         String   @default("pt")
+  durationMins Float
+  transfers    Int
+  rawJson      Json?
+  updatedAt    DateTime @updatedAt
+
+  school School       @relation(fields: [schoolId], references: [id])
+  user   UserProfile? @relation(fields: [userId], references: [id])
+
+  @@unique([originKey, schoolId, mode])
+}
+
+model Review {
+  id        String       @id @default(uuid())
+  schoolId  String
+  userId    String
+  rating    Int
+  comment   String
+  status    ReviewStatus @default(APPROVED)
+  createdAt DateTime     @default(now())
+
+  school  School        @relation(fields: [schoolId], references: [id])
+  user    UserProfile   @relation(fields: [userId], references: [id])
+  reports ReviewReport[]
+}
+
+model ReviewReport {
+  id             String   @id @default(uuid())
+  reviewId       String
+  reporterUserId String
+  reason         String
+  createdAt      DateTime @default(now())
+
+  review   Review      @relation(fields: [reviewId], references: [id])
+  reporter UserProfile @relation(fields: [reporterUserId], references: [id])
+}
+
+model SavedSchool {
+  id        String   @id @default(uuid())
+  userId    String
+  schoolId  String
+  createdAt DateTime @default(now())
+
+  user   UserProfile @relation(fields: [userId], references: [id])
+  school School      @relation(fields: [schoolId], references: [id])
+
+  @@unique([userId, schoolId])
+}

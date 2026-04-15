@@ -1,0 +1,23 @@
+{
+  "name": "optima-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @optima/api dev\" \"pnpm --filter @optima/web dev\"",
+    "build": "pnpm --filter @optima/shared build && pnpm --filter @optima/api build && pnpm --filter @optima/web build",
+    "test": "pnpm --filter @optima/api test",
+    "import:data": "pnpm --filter @optima/api import:data:dev",
+    "db:push": "pnpm --filter @optima/api db:push",
+    "db:migrate": "pnpm --filter @optima/api db:migrate",
+    "db:generate": "pnpm --filter @optima/api db:generate"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@prisma/client", "@prisma/engines", "esbuild", "prisma"]
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "prettier": "^3.2.5",
+    "prisma": "^5.12.1",
+    "typescript": "^5.4.5"
+  }
+}

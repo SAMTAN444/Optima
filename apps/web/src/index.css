@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply font-sans text-dark bg-surface;
+  }
+}
+
+@layer components {
+  /* ── Primary button — navy ── */
+  .btn-primary {
+    @apply bg-navy text-white font-semibold px-7 py-[14px] rounded-xl
+           hover:bg-navy-600 active:scale-[0.97]
+           transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+           text-[16px] shadow-sm hover:shadow-md;
+  }
+
+  /* ── Accent button — sky (text-navy for contrast 9.6:1) ── */
+  .btn-sky {
+    @apply bg-sky-300 text-navy font-semibold px-7 py-[14px] rounded-xl
+           hover:bg-sky-400 hover:text-white active:scale-[0.97]
+           transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+           text-[16px] shadow-sm hover:shadow-md;
+  }
+
+  /* ── Ghost / outline button ── */
+  .btn-secondary {
+    @apply border border-gray-300 text-dark font-semibold px-7 py-[14px] rounded-xl
+           hover:bg-surface hover:border-gray-400
+           active:scale-[0.97] transition-all duration-150
+           text-[16px];
+  }
+
+  /* ── Standard card surface — inline shadow avoids @apply custom token issue ── */
+  .card {
+    @apply bg-white rounded-2xl border border-gray-200 p-8;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.09);
+  }
+
+  /* ── Standard text input ── */
+  .input-field {
+    @apply w-full border border-gray-300 rounded-xl px-4 py-3.5 text-[16px]
+           focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy/40
+           bg-white placeholder:text-gray-400 transition-all;
+  }
+}
+
+@layer utilities {
+  /* ── Modal animations ── */
+  .modal-enter {
+    animation: modalFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .modal-backdrop-enter {
+    animation: backdropFadeIn 0.18s ease-out both;
+  }
+  @keyframes modalFadeIn {
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to   { opacity: 1; transform: scale(1)    translateY(0); }
+  }
+  @keyframes backdropFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  /* ── Landing hero entrance ── */
+  @keyframes heroIn {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .hero-in {
+    opacity: 0;
+    animation: heroIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* ── Scroll-reveal ── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition:
+      opacity   0.65s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: opacity, transform;
+  }
+  .reveal.in-view {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .reveal-d1 { transition-delay: 0.10s; }
+  .reveal-d2 { transition-delay: 0.20s; }
+  .reveal-d3 { transition-delay: 0.32s; }
+  .reveal-d4 { transition-delay: 0.44s; }
+
+  /* ── Page-level entry ── */
+  @keyframes pageIn {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .page-in {
+    animation: pageIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .page-in-delay {
+    animation: pageIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+  }
+}

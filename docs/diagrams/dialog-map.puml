@@ -1,0 +1,321 @@
+@startuml Optima_Dialog_Map
+!theme plain
+skinparam activityFontSize 11
+skinparam arrowFontSize 10
+skinparam noteBackgroundColor #FFFDE7
+skinparam noteBorderColor #F9A825
+skinparam backgroundColor White
+skinparam activity {
+  BackgroundColor White
+  BorderColor #555
+  DiamondBackgroundColor #E8EAF6
+  DiamondBorderColor #5C6BC0
+}
+skinparam ArrowColor #444
+
+title Optima — Dialog Map (Screen & Flow Navigation)\n<size:10>Based on App.tsx routes + actual page implementations</size>
+
+start
+
+' ================================================================
+' ENTRY
+' ================================================================
+:Visit "/" (HomeRedirect);
+note right
+  Checks AuthContext.user
+  loaded from Supabase session
+end note
+
+if (User authenticated?) then (yes)
+  :Redirect → /app/search;
+else (no)
+  :/  Landing Page;
+  note right
+    Public marketing page.
+    Hero, features, how-to guide.
+    CTAs: Login, Register
+  end note
+  if (User action?) then (Register)
+    :Register Page ("/register");
+    note right
+      PublicOnlyRoute:
+      redirects away if logged in
+    end note
+    :Enter: email, password, displayName;
+    :supabase.auth.signUp()\nwith user_metadata.displayName;
+    if (Success?) then (yes)
+      :Check email confirmation;
+      :/app/search (after confirm);
+    else (error)
+      :Show error → stay on Register;
+      stop
+    endif
+  else (Login)
+    :Login Page ("/login");
+    :Enter: email + password;
+    :supabase.auth.signInWithPassword();
+    if (Success?) then (yes)
+      :AuthContext updates user + session;
+    else (error)
+      :Show error → stay on Login;
+      stop
+    endif
+  endif
+endif
+
+' ================================================================
+' SEARCH PAGE  /app/search
+' ================================================================
+
+:/app/search — Search Page;
+note right
+  ProtectedRoute: redirects to /login
+  if unauthenticated.
+  URL state encodes all search params:
+  • Browse: ?q=...&page=N
+  • Nearby: ?mode=nearby&prefs=<b64>
+  • Recs:   ?mode=recs&prefs=<b64>
+  Prefs loaded from localStorage on open.
+end note
+
+if (URL has saved mode?) then (yes, recs/nearby)
+  :Decode prefs from URL base64;
+  :Auto-rerun last search;
+else (no, default)
+  :Browse all secondary schools\n(GET /schools?page=1&pageSize=15);
+endif
+
+:Show: keyword bar + quick-filter chips\n+ school list + Leaflet map;
+
+fork
+  ' ── Browse ─────────────────────────────────────────────
+  :Keyword search;
+  :GET /schools?q=...&page=N;
+  :Update list + map markers;
+  :Paginate with Prev/Next (15/page);
+
+fork again
+  ' ── Quick filter ────────────────────────────────────────
+  :Click CCA quick-filter chip\n(Basketball, Football, Choir…);
+  :GET /schools?cca=NAME;
+  :Show filtered list (all pages);
+
+fork again
+  ' ── Nearby ──────────────────────────────────────────────
+  :Click "Nearby" shortcut;
+  :GET /schools/nearby\n?postal=XXXXXX&maxMins=30;
+  note right
+    Batch-computes commutes.
+    Filters to ≤ 30 min.
+    OneMap → Haversine fallback.
+    Sorted by time ascending.
+  end note
+  :Show schools within commute threshold;
+
+fork again
+  ' ── Full Recommendation Flow ─────────────────────────────
+  :Open Preferences Modal\n(click filter icon);
+  note right
+    "Save as Default" → localStorage
+    "Reset" → clears saved prefs
+  end note
+
+  :Step 1 — Home Location;
+  :Enter home postal code\n(or use profile location);
+
+  :Step 2 — Must-Haves (hard filters);
+  note right
+    Choose ≤ 4 of 5 categories:
+    • Max commute minutes
+    • Required CCAs
+    • Required Programmes
+    • Required Subjects / Languages
+    • Required Distinctive Programmes
+    Rule: a criterion cannot be both
+    must-have AND good-to-have (Zod)
+  end note
+
+  :Step 3 — Good-To-Haves (ranked);
+  note right
+    User drag-ranks criteria by priority.
+    Optionally picks desired items per
+    criterion (e.g., specific CCAs).
+  end note
+
+  :Click "Get Recommendations";
+  :Encode prefs to base64;
+  :Push ?mode=recs&prefs=<b64> to URL;
+  :POST /recommendations;
+
+  ' Recommendation pipeline
+  :1. Geocode postal → (lat, lng)\n   via OneMap Search API;
+  if (Postal resolves?) then (no)
+    :400 POSTAL_NOT_FOUND;
+    :Show error in modal;
+    stop
+  endif
+
+  :2. Load all 133 secondary schools\n   from DB (with CCAs, progs, subjects);
+  :3. Filter by non-commute must-haves;
+  :4. getCommutesBatch():\n   DB cache → OneMap PT routing\n   (max 10 concurrent);\n   Fallback: Haversine estimate;
+  note right
+    Cache key: (originKey, schoolId, "pt")
+    TTL: 30 days.
+    estimated:true marks fallback results.
+  end note
+  :5. Apply commute must-have filter;
+
+  if (feasible.length > 0?) then (yes → results)
+    :6. Compute ROC weights\n   w_r = (1/k) × Σ(1/j, j=r..k);
+    :7. Score per criterion:\n   commute: linear decay + 0.05/transfer\n   sets: overlap ratio (or richness fallback);
+    :8. Sort DESC → return top 5;
+    :Show: RankList with score breakdown\n+ explanation chips + map pins;
+    :Click school card → SchoolProfile;
+  else (no → 0 feasible)
+    :detectBottleneck():\n   test each constraint in isolation;\n   identify most restrictive;
+    :Show bottleneck message\n+ up to 3 relaxation suggestions\n(e.g. "+15 min commute", "remove X");
+    if (User clicks suggestion?) then (yes)
+      :Apply patch to mustHaves;
+      :Re-run recommendations;
+    else (no)
+      :User edits preferences manually;
+    endif
+  endif
+
+end fork
+
+' ================================================================
+' SCHOOL PROFILE  /app/schools/:id
+' ================================================================
+
+:/app/schools/:id — School Profile;
+note right
+  Saves scroll position to sessionStorage.
+  "Back to search" → restores exact
+  URL + scroll position from state.from
+end note
+
+:GET /schools/:id (full profile + avgRating + savedByMe);
+:GET /schools/:id/reviews (approved only);
+:Render tabs: Overview | CCAs | Programmes\n| Subjects | Distinctive | Commute | Reviews;
+
+fork
+  :Click Save / Unsave;
+  if (Currently saved?) then (yes)
+    :DELETE /schools/:id/save;
+  else (no)
+    :POST /schools/:id/save;
+  endif
+  :Toggle heart icon;
+
+fork again
+  :Click "Write a Review";
+  :Fill rating (1–5) + comment (≥5 chars);
+  :POST /schools/:id/reviews;
+  if (Duplicate review?) then (yes → 409)
+    :Show "already reviewed" error;
+  else (no)
+    :Review created (APPROVED);
+    :Refresh reviews list;
+  endif
+
+fork again
+  :Click "Report" on a review;
+  :Enter reason;
+  :POST /reviews/:id/report;
+  if (Self-report?) then (yes → 403)
+    :Show SELF_REPORT error;
+  else if (Already reported?) then (yes → 409)
+    :Show DUPLICATE error;
+  else (ok)
+    :ReviewReport created;
+  endif
+
+fork again
+  :Commute tab: enter postal code;
+  :POST /schools/:id/commute;
+  :Display: durationMins, transfers, legs;
+
+fork again
+  :Click "Back to search";
+  :Return to Search Page\n(previous URL from location.state.from);
+
+end fork
+
+' ================================================================
+' SAVED SCHOOLS  /app/saved
+' ================================================================
+
+:/app/saved — Saved Schools;
+:GET /me/saved-schools;
+:Display saved school list;
+:Click school → SchoolProfile;
+
+' ================================================================
+' AUTH: Forgot / Reset Password (separate flows)
+' ================================================================
+
+:Forgot Password ("/forgot-password");
+:Enter email;
+:supabase.auth.resetPasswordForEmail();
+:Email sent confirmation;
+:User clicks link in email;
+:Reset Password ("/reset-password");
+:Enter new password;
+:supabase.auth.updateUser();
+:Redirect → /login;
+
+' ================================================================
+' ADMIN  /app/admin
+' ================================================================
+
+:/app/admin — Admin Panel;
+note right
+  AdminRoute: blocks non-admins.
+  If logged in but not ADMIN →
+  shows "Access Denied" page.
+end note
+
+fork
+  :Tab: Reported Reviews;
+  :GET /admin/reports\n(reviews with ≥1 unresolved report);
+fork again
+  :Tab: All Reviews;
+  :GET /admin/reviews (all statuses);
+end fork
+
+:For each review card — choose action:;
+
+fork
+  :Approve\nPOST /admin/reviews/:id/approve\n→ status = APPROVED;
+fork again
+  :Reject\nPOST /admin/reviews/:id/reject\n→ status = REJECTED;
+fork again
+  :Ignore Reports\nPOST /admin/reviews/:id/ignore-reports\n→ deletes ReviewReports, status = APPROVED;
+fork again
+  :Delete Review\nDELETE /admin/reviews/:id\n→ deletes ReviewReports + Review;
+fork again
+  :Ban User\nPOST /admin/users/:id/ban\n→ deletes reviews + reports\n→ UserProfile.banned = true;
+end fork
+
+' ================================================================
+' ADMIN BOOTSTRAP  /setup
+' ================================================================
+
+:/setup — Setup Page;
+note right
+  Accessible while logged in.
+  Lets user verify home address
+  and claim admin if none exists.
+end note
+:POST /bootstrap-admin;
+if (Admin already exists?) then (yes → 403)
+  :Show "admin already exists" message;
+else (no)
+  :Promote caller to ADMIN;
+  :Show success → user re-signs-in;
+endif
+
+stop
+
+@enduml

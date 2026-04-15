@@ -1,0 +1,448 @@
+@startuml Optima_Class_Diagram
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classFontSize 11
+skinparam packageFontSize 12
+skinparam linetype ortho
+skinparam groupInheritance 2
+skinparam class {
+  BackgroundColor White
+  BorderColor #555
+  ArrowColor #333
+}
+skinparam package {
+  BackgroundColor #FAFAFA
+  BorderColor #999
+}
+
+' ================================================================
+' PACKAGE 1 — Database Entities (Prisma / PostgreSQL)
+' ================================================================
+package "Database Entities (Prisma)" #EEF2FF {
+
+  enum Role <<enumeration>> {
+    STUDENT_PARENT
+    ADMIN
+  }
+
+  enum ReviewStatus <<enumeration>> {
+    PENDING
+    APPROVED
+    REJECTED
+  }
+
+  class UserProfile <<entity>> {
+    +id : UUID
+    +supabaseUserId : String {unique}
+    +role : Role
+    +banned : Boolean = false
+    +displayName : String?
+    +homeAddress : String?
+    +homePostal : String?
+    +homeLat : Float?
+    +homeLng : Float?
+    +createdAt : DateTime
+  }
+
+  class School <<entity>> {
+    +id : UUID
+    +name : String {unique}
+    +section : String?
+    +address : String?
+    +postalCode : String?
+    +url : String?
+    +telephone : String?
+    +lat : Float?
+    +lng : Float?
+    +overview : String?
+  }
+
+  class SchoolCCA <<entity>> {
+    +id : UUID
+    +schoolId : UUID {FK}
+    +ccaName : String    /' broad category '/
+    +ccaGroup : String?  /' specific CCA name '/
+  }
+
+  class SchoolProgramme <<entity>> {
+    +id : UUID
+    +schoolId : UUID {FK}
+    +programmeName : String
+  }
+
+  class SchoolSubject <<entity>> {
+    +id : UUID
+    +schoolId : UUID {FK}
+    +subjectName : String
+  }
+
+  class SchoolDistinctiveProgramme <<entity>> {
+    +id : UUID
+    +schoolId : UUID {FK}
+    +domain : String
+    +title : String
+  }
+
+  class Review <<entity>> {
+    +id : UUID
+    +schoolId : UUID {FK}
+    +userId : UUID {FK}
+    +rating : Int  /' 1–5 '/
+    +comment : String
+    +status : ReviewStatus = APPROVED
+    +createdAt : DateTime
+  }
+
+  class ReviewReport <<entity>> {
+    +id : UUID
+    +reviewId : UUID {FK}
+    +reporterUserId : UUID {FK}
+    +reason : String
+    +createdAt : DateTime
+  }
+
+  class SavedSchool <<entity>> {
+    +id : UUID
+    +userId : UUID {FK}
+    +schoolId : UUID {FK}
+    +createdAt : DateTime
+    ..
+    {unique} (userId, schoolId)
+  }
+
+  class CommuteCache <<entity>> {
+    +id : UUID
+    +originKey : String   /' "postal:XXXXXX" or "coords:lat,lng" '/
+    +schoolId : UUID {FK}
+    +userId : UUID? {FK}
+    +mode : String = "pt"
+    +durationMins : Float
+    +transfers : Int
+    +rawJson : Json?      /' raw OneMap itinerary '/
+    +updatedAt : DateTime
+    ..
+    {unique} (originKey, schoolId, mode)
+    TTL: 30 days
+  }
+
+  ' Relations
+  UserProfile "1" *-- "0..*" Review        : writes >
+  UserProfile "1" *-- "0..*" ReviewReport  : files >
+  UserProfile "1" *-- "0..*" SavedSchool   : saves >
+  UserProfile "1" *-- "0..*" CommuteCache  : owns >
+  UserProfile ..> Role : has
+
+  School "1" *-- "0..*" SchoolCCA                   : has >
+  School "1" *-- "0..*" SchoolProgramme              : has >
+  School "1" *-- "0..*" SchoolSubject                : has >
+  School "1" *-- "0..*" SchoolDistinctiveProgramme   : has >
+  School "1" *-- "0..*" Review                       : receives >
+  School "1" *-- "0..*" SavedSchool                  : savedBy >
+  School "1" *-- "0..*" CommuteCache                 : cached for >
+
+  Review "1" *-- "0..*" ReviewReport : reported by >
+  Review ..> ReviewStatus : has
+}
+
+' ================================================================
+' PACKAGE 2 — Shared TypeScript Interfaces (@optima/shared)
+' ================================================================
+package "Shared Types (@optima/shared)" #FFF8E1 {
+
+  interface SchoolSummary {
+    +id : String
+    +name : String
+    +section : String?
+    +address : String?
+    +postalCode : String?
+    +url : String?
+    +telephone : String?
+    +lat : Number?
+    +lng : Number?
+  }
+
+  interface SchoolDetail {
+    +overview : String?
+    +ccas : SchoolCCA[]
+    +programmes : SchoolProgramme[]
+    +subjects : SchoolSubject[]
+    +distinctiveProgrammes : SchoolDistinctiveProgramme[]
+    +avgRating : Number?
+    +reviewCount : Number
+    +savedByMe : Boolean
+  }
+
+  SchoolDetail --|> SchoolSummary : extends
+
+  enum RankedCriterion <<enumeration>> {
+    commute
+    programmes
+    subjectsLanguages
+    ccas
+    distinctive
+  }
+
+  interface MustHaves {
+    +maxCommuteMins? : Number
+    +requiredProgrammes? : String[]
+    +requiredSubjectsLanguages? : String[]
+    +requiredCCAs? : String[]
+    +requiredDistinctive? : String[]
+  }
+
+  interface GoodToHaves {
+    +rankedCriteria : RankedCriterion[]
+    +desiredProgrammes? : String[]
+    +desiredSubjectsLanguages? : String[]
+    +desiredCCAs? : String[]
+    +desiredDistinctive? : String[]
+  }
+
+  GoodToHaves ..> RankedCriterion : uses
+
+  interface CommuteLeg {
+    +mode : String  /' WALK | BUS | SUBWAY | TRAM '/
+    +route? : String
+    +durationMins : Number
+    +from : String
+    +to : String
+  }
+
+  interface CommuteInfo {
+    +durationMins : Number
+    +transfers : Number
+    +estimated? : Boolean
+    +legs? : CommuteLeg[]
+  }
+
+  CommuteInfo *-- CommuteLeg : legs
+
+  interface SchoolForRanking {
+    +id : String
+    +name : String
+    +lat : Number?
+    +lng : Number?
+    +ccas : String[]         /' ccaGroup values '/
+    +programmes : String[]
+    +subjects : String[]
+    +distinctive : String[]  /' "domain::title" '/
+    +commute : CommuteInfo?
+  }
+
+  interface ScoreBreakdown {
+    +criterion : String
+    +weight : Number   /' ROC weight '/
+    +score : Number    /' 0–1 '/
+    +contribution : Number  /' weight × score '/
+  }
+
+  interface RankedResult {
+    +school : SchoolForRanking
+    +commute : CommuteInfo
+    +totalScore : Number
+    +breakdown : ScoreBreakdown[]
+    +explanation.topCriteria : String[]
+    +explanation.matched : MatchedItems
+  }
+
+  RankedResult *-- ScoreBreakdown : breakdown
+  RankedResult *-- CommuteInfo
+  RankedResult *-- SchoolForRanking
+
+  interface RelaxSuggestion {
+    +label : String
+    +patch : Partial<MustHaves>
+    +newCount : Number
+  }
+
+  interface NoResultsPayload {
+    +noResults : true
+    +bottleneck.type : String
+    +bottleneck.details : String
+    +suggestions : RelaxSuggestion[]
+  }
+
+  NoResultsPayload *-- RelaxSuggestion : suggestions
+  RelaxSuggestion ..> MustHaves : partial patch
+
+  interface ApiSuccess<T> {
+    +ok : true
+    +data : T
+  }
+
+  interface ApiError {
+    +ok : false
+    +error.code : String
+    +error.message : String
+    +error.details? : unknown
+  }
+}
+
+' ================================================================
+' PACKAGE 3 — API Modules (apps/api/src)
+' ================================================================
+package "API Modules (apps/api/src)" #E8F5E9 {
+
+  class "middleware/auth" as AuthMW <<module>> {
+    +authenticate(req, res, next) : void
+    +optionalAuth(req, res, next) : void
+    --
+    -getJWKS() : RemoteJWKSet
+    -resolveProfile(sub, name?, email?) : UserProfile
+    /' Verifies Supabase JWT via JWKS.
+       Upserts UserProfile on first call.
+       Blocks banned users (403). '/
+  }
+
+  class "middleware/requireRole" as RoleMW <<module>> {
+    +requireAuth(req, res, next) : void
+    +requireAdmin(req, res, next) : void
+  }
+
+  class "middleware/validate" as ValidateMW <<module>> {
+    +validateBody(schema: ZodSchema) : Handler
+    +validateQuery(schema: ZodSchema) : Handler
+    /' On failure → 400 VALIDATION_ERROR '/
+  }
+
+  class "engine/ranking" as RankingEngine <<module>> {
+    +computeRocWeights(k: number) : number[]
+    +commuteScore(dur, xfers, tMax) : number
+    +setOverlapScore(desired[], items[]) : number
+    +passesMustHaves(school, mustHaves) : boolean
+    +passesNonCommuteMustHaves(school, mustHaves) : boolean
+    +rankSchools(schools[], mh, gth) : RankedResult[]
+    +detectBottleneck(schools[], mh, gth?) : NoResultsPayload
+    --
+    /' Pure module — no DB or HTTP calls.
+       ROC weights: w_r = (1/k) × Σ(1/j for j=r..k)
+       Commute score: clamp(1-(t-10)/(tMax-10) - 0.05×xfers)
+       Set score: |desired∩school| / |desired|
+       Richness fallback when desired is empty '/
+  }
+
+  class "services/commute" as CommuteSvc <<module>> {
+    +geocodePostal(postal) : Coords?
+    +estimateCommute(origin, dest) : CommuteInfo
+    +getCommute(key, origin, schoolId, dest, userId?) : CommuteInfo?
+    +getCommutesBatch(key, origin, schools[], opts?) : Map<id, CommuteInfo>
+    +mapConcurrent(items, limit, fn) : Promise<R[]>
+    --
+    -fetchCommuteFromOneMap(origin, dest) : CommuteInfo?
+    -haversineKm(lat1, lng1, lat2, lng2) : number
+    -extractLegs(rawJson) : CommuteLeg[]
+    -buildRawJson(legs) : object
+    /' Cache TTL: 30 days.
+       Concurrency cap: 10 OneMap calls.
+       Haversine fallback: 4min/km + 5min base '/
+  }
+
+  class "lib/onemapClient" as OneMapLib <<module>> {
+    +onemapFetch(path, init?) : Response
+    +onemapPublicFetch(path, init?) : Response
+    +isConfigured() : boolean
+    +getToken() : string?
+    --
+    -fetchLegacyToken() : string?
+    /' Auth priority: ONEMAP_TOKEN > email+password.
+       Request timeout: 9 seconds. '/
+  }
+
+  class "lib/prisma" as PrismaLib <<module>> {
+    +prisma : PrismaClient  /' singleton '/
+  }
+}
+
+' ================================================================
+' PACKAGE 4 — Route Handlers (Express Routers)
+' ================================================================
+package "Route Handlers (Express)" #E3F2FD {
+
+  class "routes/schools" as SchoolsRouter <<router>> {
+    GET  /schools             /' browse + filter '/
+    GET  /schools/meta        /' filter dropdown data '/
+    GET  /schools/nearby      /' within maxMins commute '/
+    POST /schools/:id/commute
+    GET  /schools/:id         /' full profile '/
+    GET  /schools/:id/reviews
+    POST /schools/:id/reviews /' auth required '/
+    POST /schools/:id/save    /' auth required '/
+    DELETE /schools/:id/save  /' auth required '/
+  }
+
+  class "routes/recommendations" as RecsRouter <<router>> {
+    POST /recommendations  /' auth optional '/
+  }
+
+  class "routes/me" as MeRouter <<router>> {
+    GET   /me
+    PATCH /me
+    GET   /me/saved-schools
+  }
+
+  class "routes/reviews" as ReviewsRouter <<router>> {
+    POST /reviews/:id/report  /' auth required '/
+  }
+
+  class "routes/admin" as AdminRouter <<router>> {
+    GET    /admin/reviews
+    GET    /admin/reports
+    POST   /admin/reviews/:id/approve
+    POST   /admin/reviews/:id/reject
+    POST   /admin/reviews/:id/ignore-reports
+    DELETE /admin/reviews/:id
+    GET    /admin/users
+    POST   /admin/users/:id/ban
+    POST   /admin/users/:id/unban
+    POST   /admin/users/:id/promote
+    POST   /admin/users/:id/demote
+    /' All require authenticate + requireAdmin '/
+  }
+
+  class "routes/bootstrap" as BootstrapRouter <<router>> {
+    POST /bootstrap-admin
+    /' Succeeds only when adminCount = 0 '/
+  }
+
+  class "routes/health" as HealthRouter <<router>> {
+    GET /health
+  }
+
+  class "routes/onemap" as OnemapRouter <<router>> {
+    GET /onemap/ping
+  }
+}
+
+' ================================================================
+' DEPENDENCIES (cross-package)
+' ================================================================
+
+' Routes → Middleware
+SchoolsRouter  ..> AuthMW     : optionalAuth / authenticate
+SchoolsRouter  ..> ValidateMW : validateBody / validateQuery
+RecsRouter     ..> AuthMW     : optionalAuth
+RecsRouter     ..> ValidateMW : validateBody
+MeRouter       ..> AuthMW     : authenticate
+ReviewsRouter  ..> AuthMW     : authenticate
+ReviewsRouter  ..> ValidateMW : validateBody
+AdminRouter    ..> AuthMW     : authenticate
+AdminRouter    ..> RoleMW     : requireAdmin
+BootstrapRouter ..> AuthMW   : authenticate
+
+' Routes → Services / Engine / DB
+RecsRouter     --> RankingEngine : rankSchools(), detectBottleneck()
+RecsRouter     --> CommuteSvc    : geocodePostal(), getCommutesBatch()
+RecsRouter     --> PrismaLib     : School, UserProfile
+SchoolsRouter  --> CommuteSvc    : geocodePostal(), getCommute(),\ngetCommutesBatch(), estimateCommute()
+SchoolsRouter  --> PrismaLib     : School, Review, SavedSchool
+MeRouter       --> PrismaLib     : UserProfile, SavedSchool
+ReviewsRouter  --> PrismaLib     : Review, ReviewReport
+AdminRouter    --> PrismaLib     : Review, ReviewReport, UserProfile
+BootstrapRouter --> PrismaLib   : UserProfile
+
+' Service → Infra
+CommuteSvc     --> OneMapLib  : onemapFetch(), onemapPublicFetch()
+CommuteSvc     --> PrismaLib  : CommuteCache (read/write)
+AuthMW         --> PrismaLib  : UserProfile (upsert on every auth)
+
+@enduml

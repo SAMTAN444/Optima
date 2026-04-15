@@ -1,0 +1,151 @@
+@startuml Optima_Use_Case_Diagram
+!theme plain
+skinparam actorStyle awesome
+skinparam usecaseFontSize 12
+skinparam actorFontSize 13
+skinparam usecaseBackgroundColor White
+skinparam usecaseBorderColor #555
+skinparam packageBackgroundColor #FAFAFA
+skinparam packageBorderColor #999
+skinparam arrowColor #444
+skinparam usecaseArrowColor #444
+
+left to right direction
+
+title Optima — Use Case Diagram\n<size:10>Based strictly on implemented API endpoints and frontend pages</size>
+
+' ── Actors ───────────────────────────────────────────────────
+actor "Guest\n(Unauthenticated)" as Guest #LightBlue
+actor "User\n(Student / Parent)" as User #LightGreen
+actor "Admin" as Admin #LightSalmon
+actor "Supabase Auth" as Supabase <<external system>> #LightYellow
+actor "OneMap API" as OneMap <<external system>> #LightYellow
+actor "data.gov.sg" as DataGov <<external system>> #LightYellow
+
+' Admin inherits from User
+User --|> Guest
+Admin --|> User
+
+' ── Use Cases ────────────────────────────────────────────────
+
+rectangle "Account Management" {
+  usecase "Register account\n(email + password\n+ displayName)" as UC_REGISTER
+  usecase "Sign in" as UC_LOGIN
+  usecase "Sign out" as UC_SIGNOUT
+  usecase "Request password reset" as UC_FORGOT_PW
+  usecase "Confirm password reset" as UC_RESET_PW
+  usecase "Update profile\n(home location,\ndisplay name)" as UC_UPDATE_PROFILE
+  usecase "Bootstrap first admin\n(POST /bootstrap-admin)" as UC_BOOTSTRAP
+}
+
+rectangle "School Discovery" {
+  usecase "Browse schools\n(paginated, name search)" as UC_BROWSE
+  usecase "Filter schools by\nCCA / Programme / Subject" as UC_FILTER
+  usecase "View schools\nnearby (within N minutes)" as UC_NEARBY
+  usecase "View school profile\n(details, CCAs, programmes,\nsubjects, distinctive)" as UC_SCHOOL_PROFILE
+  usecase "View filter options\n(GET /schools/meta)" as UC_META
+  usecase "Compute commute\nto a school" as UC_COMMUTE
+}
+
+rectangle "Personalised Recommendations" {
+  usecase "Set must-have\nconstraints" as UC_MUSTHAVES
+  usecase "Set good-to-have\npreferences (ranked)" as UC_GOODTOHAVES
+  usecase "Get school\nrecommendations (top 5)" as UC_RECOMMENDATIONS
+  usecase "View score\nbreakdown + explanation" as UC_BREAKDOWN
+  usecase "Apply constraint\nrelaxation suggestion" as UC_RELAX
+  usecase "Save preferences\nto localStorage" as UC_SAVE_PREFS
+}
+
+rectangle "User Actions (Authenticated)" {
+  usecase "Save school\n(bookmark)" as UC_SAVE_SCHOOL
+  usecase "Unsave school" as UC_UNSAVE_SCHOOL
+  usecase "View saved schools" as UC_VIEW_SAVED
+  usecase "Write review\n(rating 1–5 + comment)" as UC_WRITE_REVIEW
+  usecase "Report review\n(with reason)" as UC_REPORT_REVIEW
+}
+
+rectangle "Admin Moderation" {
+  usecase "View all reviews" as UC_ADMIN_ALL_REVIEWS
+  usecase "View reported reviews" as UC_ADMIN_REPORTS
+  usecase "Approve review" as UC_APPROVE
+  usecase "Reject review" as UC_REJECT
+  usecase "Ignore reports\n(keep review visible)" as UC_IGNORE_REPORTS
+  usecase "Delete review" as UC_DELETE_REVIEW
+  usecase "View all users" as UC_ADMIN_USERS
+  usecase "Ban user\n(deletes their content)" as UC_BAN
+  usecase "Unban user" as UC_UNBAN
+  usecase "Promote user to Admin" as UC_PROMOTE
+  usecase "Demote Admin to User" as UC_DEMOTE
+}
+
+rectangle "Data Import (Offline / Script)" {
+  usecase "Import school data\nfrom data.gov.sg" as UC_IMPORT
+}
+
+' ── Actor → Use Case relationships ───────────────────────────
+
+' Guest
+Guest --> UC_REGISTER
+Guest --> UC_LOGIN
+Guest --> UC_FORGOT_PW
+Guest --> UC_RESET_PW
+Guest --> UC_BROWSE
+Guest --> UC_FILTER
+Guest --> UC_META
+Guest --> UC_NEARBY
+Guest --> UC_SCHOOL_PROFILE
+
+' User (inherits Guest UCs + adds these)
+User --> UC_SIGNOUT
+User --> UC_UPDATE_PROFILE
+User --> UC_BOOTSTRAP
+User --> UC_RECOMMENDATIONS
+User --> UC_MUSTHAVES
+User --> UC_GOODTOHAVES
+User --> UC_BREAKDOWN
+User --> UC_RELAX
+User --> UC_SAVE_PREFS
+User --> UC_SAVE_SCHOOL
+User --> UC_UNSAVE_SCHOOL
+User --> UC_VIEW_SAVED
+User --> UC_WRITE_REVIEW
+User --> UC_REPORT_REVIEW
+User --> UC_COMMUTE
+
+' Admin (inherits User UCs + adds these)
+Admin --> UC_ADMIN_ALL_REVIEWS
+Admin --> UC_ADMIN_REPORTS
+Admin --> UC_APPROVE
+Admin --> UC_REJECT
+Admin --> UC_IGNORE_REPORTS
+Admin --> UC_DELETE_REVIEW
+Admin --> UC_ADMIN_USERS
+Admin --> UC_BAN
+Admin --> UC_UNBAN
+Admin --> UC_PROMOTE
+Admin --> UC_DEMOTE
+
+' External systems
+UC_REGISTER ..> Supabase : <<uses>>
+UC_LOGIN ..> Supabase : <<uses>>
+UC_FORGOT_PW ..> Supabase : <<uses>>
+UC_RESET_PW ..> Supabase : <<uses>>
+UC_SIGNOUT ..> Supabase : <<uses>>
+
+UC_RECOMMENDATIONS ..> OneMap : <<uses>>\n(routing API\n+ geocoding)
+UC_NEARBY ..> OneMap : <<uses>>
+UC_COMMUTE ..> OneMap : <<uses>>
+
+UC_IMPORT ..> DataGov : <<uses>>\n(collection 457 CSVs)
+UC_IMPORT ..> OneMap : <<uses>>\n(geocoding)
+
+' ── Include / Extend ─────────────────────────────────────────
+UC_RECOMMENDATIONS .> UC_MUSTHAVES : <<include>>
+UC_RECOMMENDATIONS .> UC_GOODTOHAVES : <<include>>
+UC_RECOMMENDATIONS .> UC_BREAKDOWN : <<include>>
+UC_RELAX .> UC_RECOMMENDATIONS : <<extend>>
+
+UC_FILTER .> UC_META : <<include>>
+UC_NEARBY .> UC_COMMUTE : <<include>>
+
+@enduml
